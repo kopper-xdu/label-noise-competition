@@ -12,9 +12,9 @@ import numpy as np
 from PreResNet import *
 from sklearn.mixture import GaussianMixture
 import my_dataloader_cifar as dataloader
-#import visdom
+import visdom
 
-#vis = visdom.Visdom(port=6006)
+vis = visdom.Visdom(port=6006)
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR Training')
 parser.add_argument('--batch_size', default=128, type=int, help='train batchsize') 
@@ -120,10 +120,9 @@ def train(epoch,net,net2,optimizer,labeled_trainloader,unlabeled_trainloader):
         optimizer.step()
         
         sys.stdout.write('\r')
-        sys.stdout.write('%s:%.1f-%s | Epoch [%3d/%3d] Iter[%3d/%3d]\t Labeled loss: %.2f  Unlabeled loss: %.2f'
+        sys.stdout.write('%s:%.1f-%s | Epoch [%3d/%3d] Iter[%3d/%3d]\t Labeled loss: %.2f  Unlabeled loss: %f'
                 %(args.dataset, args.r, args.noise_mode, epoch, args.num_epochs, batch_idx+1, num_iter, Lx.item(), Lu.item()))
         sys.stdout.flush()
-        print(Lu, lamb)
 
 def warmup(epoch,net,optimizer,dataloader, plot):
     net.train()
@@ -169,6 +168,7 @@ def test(epoch, net1, net2):
     if (epoch+1) % 15 == 0:
         torch.save(net1.state_dict(), f'./checkpoint/epoch{epoch+1}_net1.pt')
         torch.save(net2.state_dict(), f'./checkpoint/epoch{epoch+1}_net2.pt')
+    vis.line([acc], [epoch], win='train', update='append')
     
 
 def eval_train(model,all_loss):    
@@ -209,7 +209,7 @@ class SemiLoss(object):
         Lx = -torch.mean(torch.sum(F.log_softmax(outputs_x, dim=1) * targets_x, dim=1))
         Lu = torch.mean((probs_u - targets_u)**2)
 
-        return Lx, Lu, linear_rampup(epoch, warm_up)
+        return Lx, Lu, linear_rampup(epoch,warm_up)
 
 class NegEntropy(object):
     def __call__(self,outputs):
@@ -231,7 +231,7 @@ if __name__ == '__main__':
     elif args.dataset=='cifar100':
         warm_up = 30
 
-    loader = dataloader.cifar_dataloader(args.dataset, batch_size=args.batch_size, num_workers=4)
+    loader = dataloader.cifar_dataloader(args.dataset, batch_size=args.batch_size, num_workers=12)
     print('| Building net')
     net1 = create_model()
     net2 = create_model()
@@ -270,7 +270,7 @@ if __name__ == '__main__':
                 torch.save(net2.state_dict(), './checkpoint/warmup_net2.pt')
 
     
-        else:   
+        else:     
             prob1,all_loss[0]=eval_train(net1,all_loss[0])   
             prob2,all_loss[1]=eval_train(net2,all_loss[1])          
                 
@@ -289,3 +289,5 @@ if __name__ == '__main__':
 
     torch.save(net1.state_dict(), './checkpoint/final_net1.pt')
     torch.save(net2.state_dict(), './checkpoint/final_net2.pt')
+
+    
